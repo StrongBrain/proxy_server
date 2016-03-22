@@ -40,9 +40,9 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_GET(self): # pylint: disable=invalid-name
         """ Overwrite do_GET method. """
         data = ''
-        if self._mc.get('sample_request'):
+        if self._mc.get(self.path):
             # Get response from memcache
-            data = self._mc.get('sample_request')
+            data = self._mc.get(self.path)
             status_code = data.status_code # pylint: disable=no-member
         else:
             # Setup proxy server request URL
@@ -52,7 +52,7 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             try:
                 # Fetch data from the proxy server and add it to memcache
                 data = requests.get(url, timeout=20)
-                self._mc.set('sample_request', data, time=TTL)
+                self._mc.set(self.path, data, time=TTL)
                 status_code = data.status_code
             except requests.exceptions.ConnectionError as e: # pylint: disable=invalid-name
                 log.info(e)
