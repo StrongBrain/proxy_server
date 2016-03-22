@@ -1,3 +1,12 @@
+"""
+ Usage:
+ A call to http://localhost:80000/test will cache in memcache for TTL seconds
+ and not redownload it again. Host, port and TTL may be configured via
+ command line arguments or via configuration file.
+ To stop the server simply send SIGINT (Ctrl-C). It does not handle any headers or post data.
+
+"""
+
 from optparse import OptionParser
 
 import BaseHTTPServer
@@ -7,17 +16,18 @@ import memcache
 import requests
 
 
-CONFIG = 'proxy_server.cfg'
+CONF_FILE = 'proxy_server.cfg'
 REQUEST_TIMEOUT = 408
 SERVICE_UNAVAILABLE = 503
 
-log = logging.getLogger(__name__)
-config = ConfigParser.ConfigParser()
-config.read(CONFIG)
+log = logging.getLogger(__name__) # pylint: disable=invalid-name
+config = ConfigParser.ConfigParser() # pylint: disable=invalid-name
+config.read(CONF_FILE)
 
 TTL = config.getint('proxy_server', 'TTL')
 
 class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    """ Custom handler for caching proxy server. """
 
     def __init__(self, *args, **kwargs):
         # Setup memcache client
@@ -27,7 +37,8 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
-    def do_GET(self):
+    def do_GET(self): # pylint: disable=invalid-name
+        """ Overwrite do_GET method. """
         data = ''
         if self._mc.get('sample_request'):
             # Get response from memcache
@@ -43,10 +54,10 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 data = requests.get(url, timeout=20)
                 self._mc.set('sample_request', data, time=TTL)
                 status_code = data.status_code
-            except requests.exceptions.ConnectionError as e:
+            except requests.exceptions.ConnectionError as e: # pylint: disable=invalid-name
                 log.info(e)
                 status_code = SERVICE_UNAVAILABLE
-            except requests.exceptions.Timeout as e:
+            except requests.exceptions.Timeout as e: # pylint: disable=invalid-name
                 log.info(e)
                 status_code = REQUEST_TIMEOUT
 
@@ -59,7 +70,7 @@ def run():
     """ Run a simple proxy server with caching. """
     # Parse arguments from command line.
     usage = """ Usage: <script_name> -s <server> -p <port> -t <ttl>.
-               -  script_name - proxy_server.py
+               -  script_name - server.py
                -  server - IP address of running proxy server
                -  port - port where some server is running
                -  ttl - Time To Live ( time for caching requests).
@@ -77,7 +88,7 @@ def run():
         # Get configurations from command line
         host = opts.server
         port = int(opts.port)
-        global TTL
+        global TTL # pylint: disable=global-statement
         TTL = int(opts.ttl)
     else:
         parser.print_usage()
