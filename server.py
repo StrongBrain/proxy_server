@@ -31,9 +31,9 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         # Setup memcache client
-        self._mhost = config.get('memcached', 'host')
-        self._mport = config.getint('memcached', 'port')
-        self._mc = memcache.Client([(self._mhost, self._mport)])
+        mhost = config.get('memcached', 'host')
+        mport = config.getint('memcached', 'port')
+        self._mc = memcache.Client([(mhost, mport)])
 
         BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
