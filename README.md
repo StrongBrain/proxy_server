@@ -8,34 +8,24 @@ Simple caching Proxy Server
 
 After downloading of sources follow these steps:
 
-1. Install memcached::
+1. Install memcached:
 
-```
-sudo apt-get install memcached
-```
+`sudo apt-get install memcached`
 
-2. Make sure, memcached is running::
+2. Make sure, memcached is running:
 
-```
-sudo  /etc/init.d/memcached status
-```
+`sudo  /etc/init.d/memcached status`
 
-3. Check usage of running script::
+3. Check usage of running script:
 
-```
-python server.py --help
-```
+`python server.py --help`
 
-4. Run starting script::
+4. Run starting script:
 
-```
-python server.py -s 127.0.0.1 -p 8000 -t 15
-```
+`python server.py -s 127.0.0.1 -p 8000 -t 15`
 
-or without command line arguments(in this case all parameters gets from configuration file)::
+or without command line arguments(in this case all parameters gets from configuration file):
 
-```
-python server.py
-```
+`python server.py`
 
 5. Try to send few requests to proxy server and make sure that caching is working fine.
