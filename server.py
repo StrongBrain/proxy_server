@@ -7,8 +7,7 @@
 
 """
 
-from optparse import OptionParser
-
+import argparse
 import BaseHTTPServer
 import ConfigParser
 import logging
@@ -21,19 +20,33 @@ REQUEST_TIMEOUT = 408
 SERVICE_UNAVAILABLE = 503
 
 log = logging.getLogger(__name__) # pylint: disable=invalid-name
-config = ConfigParser.ConfigParser() # pylint: disable=invalid-name
-config.read(CONF_FILE)
 
-TTL = config.getint('proxy_server', 'TTL')
+
+class CachingServer(BaseHTTPServer.HTTPServer):
+    """
+    Wrapper for HTTPServer to make it possible
+    to server memcached configs.
+    """
+    def __init__(self, *args, **kwargs):
+        self._mc_host = kwargs.pop("mc_host")
+        self._mc_port = kwargs.pop("mc_port")
+        self._ttl = kwargs.pop("ttl")
+        BaseHTTPServer.HTTPServer.__init__(self, *args, **kwargs)
+
 
 class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """ Custom handler for caching proxy server. """
 
     def __init__(self, *args, **kwargs):
         # Setup memcache client
-        mhost = config.get('memcached', 'host')
-        mport = config.getint('memcached', 'port')
-        self._mc = memcache.Client([(mhost, mport)])
+
+        # Trick: read memcached configs from CachingServer instance
+        socket_obj, server, cache_server = args
+        self._ttl = cache_server._ttl
+        mc_host = cache_server._mc_host
+        mc_port = cache_server._mc_port
+
+        self._mc = memcache.Client([(mc_host, mc_port)])
 
         BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
@@ -52,13 +65,13 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             try:
                 # Fetch data from the proxy server and add it to memcache
                 data = requests.get(url, timeout=20)
-                self._mc.set(self.path, data, time=TTL)
+                self._mc.set(self.path, data, time=self._ttl)
                 status_code = data.status_code
             except requests.exceptions.ConnectionError as e: # pylint: disable=invalid-name
-                log.info(e)
+                log.error(e)
                 status_code = SERVICE_UNAVAILABLE
             except requests.exceptions.Timeout as e: # pylint: disable=invalid-name
-                log.info(e)
+                log.error(e)
                 status_code = REQUEST_TIMEOUT
 
         # Send response to the client
@@ -66,40 +79,55 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.writelines(data)
 
+
+def read_configs(filename):
+    """ Read configurations from configuration file. """
+    conf = ConfigParser.ConfigParser()
+    conf.read(filename)
+    host = conf.get('proxy_server', 'host')
+    port = conf.getint('proxy_server', 'port')
+    ttl = conf.getint('proxy_server', 'TTL')
+    return host, port, ttl
+
+
+def read_mc_conf(filename):
+    """Read configuration for memcached. """
+    conf = ConfigParser.ConfigParser()
+    conf.read(filename)
+    mc_host = conf.get('memcached', 'host')
+    mc_port = conf.getint('memcached', 'port')
+    return mc_host, mc_port
+
+
+def parse_args():
+    """ Parse arguments from a command line. """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--server", action="store",
+                        help="setup proxy server(via IP address)")
+    parser.add_argument("-p", "--port", action="store", type=int,
+                        help="setup port of proxy server")
+    parser.add_argument("-t", "--ttl", action="store", type=int,
+                        help="time for caching requests")
+    args = parser.parse_args()
+    return args.server, args.port, args.ttl
+
+
 def run():
     """ Run a simple proxy server with caching. """
-    # Parse arguments from command line.
-    usage = """ Usage: <script_name> -s <server> -p <port> -t <ttl>.
-               -  script_name - server.py
-               -  server - IP address of running proxy server
-               -  port - port where some server is running
-               -  ttl - Time To Live ( time for caching requests).
-            """
-    parser = OptionParser(usage=usage)
-    parser.add_option("-s", "--server", dest="server",
-                      help="setup proxy server(via IP address)")
-    parser.add_option("-p", "--port", dest="port",
-                      help="setup port of proxy server")
-    parser.add_option("-t", "--ttl", dest="ttl",
-                      help="time for caching requests")
-    opts, _ = parser.parse_args()
+    host, port, ttl = parse_args()
 
-    if opts.server and opts.port and opts.ttl:
-        # Get configurations from command line
-        host = opts.server
-        port = int(opts.port)
-        global TTL # pylint: disable=global-statement
-        TTL = int(opts.ttl)
-    else:
-        parser.print_usage()
+    # Read memcached configs
+    mc_host, mc_port = read_mc_conf(CONF_FILE)
+
+    if not all([host, port, ttl]):
         print "Used configuration file: proxy_server.cfg"
 
         # Load configs from config file
-        host = config.get('proxy_server', 'host')
-        port = config.getint('proxy_server', 'port')
+        host, port, ttl, mc_host, mc_port = read_configs(CONF_FILE)
 
     # Run proxy server.
-    httpd = BaseHTTPServer.HTTPServer((host, port), CachingHandler)
+    httpd = CachingServer((host, port), CachingHandler,
+                          mc_host=mc_host, mc_port=mc_port, ttl=ttl)
     httpd.serve_forever()
 
 if __name__ == '__main__':
