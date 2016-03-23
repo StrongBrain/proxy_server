@@ -28,9 +28,9 @@ class CachingServer(BaseHTTPServer.HTTPServer):
     to server memcached configs.
     """
     def __init__(self, *args, **kwargs):
-        self._mc_host = kwargs.pop("mc_host")
-        self._mc_port = kwargs.pop("mc_port")
-        self._ttl = kwargs.pop("ttl")
+        self.mc_host = kwargs.pop("mc_host")
+        self.mc_port = kwargs.pop("mc_port")
+        self.ttl = kwargs.pop("ttl")
         BaseHTTPServer.HTTPServer.__init__(self, *args, **kwargs)
 
 
@@ -41,10 +41,10 @@ class CachingHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # Setup memcache client
 
         # Trick: read memcached configs from CachingServer instance
-        socket_obj, server, cache_server = args
-        self._ttl = cache_server._ttl
-        mc_host = cache_server._mc_host
-        mc_port = cache_server._mc_port
+        _, _, cache_server = args
+        self._ttl = cache_server.ttl
+        mc_host = cache_server.mc_host
+        mc_port = cache_server.mc_port
 
         self._mc = memcache.Client([(mc_host, mc_port)])
 
@@ -123,7 +123,7 @@ def run():
         print "Used configuration file: proxy_server.cfg"
 
         # Load configs from config file
-        host, port, ttl, mc_host, mc_port = read_configs(CONF_FILE)
+        host, port, ttl = read_configs(CONF_FILE)
 
     # Run proxy server.
     httpd = CachingServer((host, port), CachingHandler,
